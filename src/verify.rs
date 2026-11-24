@@ -1,16 +1,16 @@
-//! Soft-compare: do chunks generated from the seed look like the server's?
+//! Soft-compare of generated chunks against real server chunks.
 
-/// A chunk's 256 top heights (solid or fluid), `None` where it's empty.
+/// Top height (solid or fluid) of each column in a chunk. `None` if empty.
 pub type Heights = [Option<i32>; 256];
 
 /// Chunks to compare before deciding.
 pub const CHUNKS: usize = 16;
-/// Columns within this many blocks count as the same.
+/// Columns within this many blocks count as matching.
 const TOLERANCE: i32 = 3;
-/// Median share of matching columns for the seed to count as right.
+/// Median match share needed for seed to pass.
 const PASS: f32 = 0.6;
 
-/// The share of columns that match, or `None` when too few have ground.
+/// Share of matching columns. `None` if too few have ground.
 pub fn similarity(real: &Heights, generated: &Heights) -> Option<f32> {
     let mut compared = 0;
     let mut matching = 0;
@@ -25,7 +25,7 @@ pub fn similarity(real: &Heights, generated: &Heights) -> Option<f32> {
     (compared >= 64).then(|| matching as f32 / compared as f32)
 }
 
-/// The median score, and whether it passes.
+/// Median score, and whether it passes.
 pub fn verdict(scores: &mut [f32]) -> (f32, bool) {
     scores.sort_by(f32::total_cmp);
     let median = scores.get(scores.len() / 2).copied().unwrap_or(0.0);
@@ -36,6 +36,7 @@ pub fn verdict(scores: &mut [f32]) -> (f32, bool) {
 mod tests {
     use super::*;
 
+    /// Heights within tolerance count as matching.
     #[test]
     fn close_heights_match() {
         let real: Heights = std::array::from_fn(|i| Some(64 + (i % 4) as i32));
@@ -46,6 +47,7 @@ mod tests {
         assert_eq!(similarity(&[None; 256], &[None; 256]), None);
     }
 
+    /// Verdict follows median score.
     #[test]
     fn median_decides() {
         assert!(verdict(&mut [0.9, 0.1, 0.8]).1);

@@ -1,8 +1,7 @@
 //! Client Seed Loader: Use a seed you know to generate far terrain on servers
 //!
-//! This crate keeps the seeds (`/lodseed`, `config/client_seed_loader.toml`)
-//! and the chat lines. The far-terrain source itself is `src/game/seeded.rs`,
-//! compiled inside the game; it calls the `pub fn`s here.
+//! - Keeps seeds (`/lodseed`, `config/client_seed_loader.toml`) and chat lines.
+//! - Far-terrain source is `src/game/seeded.rs`, compiled inside game. It calls `pub fn`s here.
 
 mod config;
 mod run;
@@ -23,7 +22,7 @@ pub use crate::verify::Heights;
 
 const PREFIX: &str = "[Seed Loader] ";
 
-/// The server and level the player is in.
+/// Player's current server and level.
 #[derive(Clone, PartialEq, Eq)]
 struct Here {
     server: String,
@@ -34,10 +33,10 @@ struct Here {
 struct State {
     config: Option<Config>,
     here: Option<Here>,
-    /// A seed changed: far terrain is set up again.
+    /// Seed changed, so far terrain gets rebuilt.
     dirty: bool,
     run: Option<Arc<Run>>,
-    /// Chat lines waiting for the next client tick.
+    /// Chat lines queued for next client tick.
     outbox: Vec<String>,
 }
 
@@ -50,6 +49,7 @@ static STATE: Mutex<State> = Mutex::new(State {
 });
 static RADIUS: AtomicI32 = AtomicI32::new(0);
 
+/// Config, loaded on first use.
 fn config(state: &mut State) -> &mut Config {
     state.config.get_or_insert_with(|| {
         let config = Config::load();
@@ -58,9 +58,9 @@ fn config(state: &mut State) -> &mut Config {
     })
 }
 
-// ---- Called by the game side (src/game/seeded.rs) ----
+// ---- Called by game side (src/game/seeded.rs) ----
 
-/// The player is on `server` (its far-terrain folder name) in `level`.
+/// Player is on `server` (its far-terrain folder name) in `level`.
 pub fn here(server: &str, level: &str, hashed_seed: i64) {
     let mut state = STATE.lock().unwrap();
     let same = state
@@ -83,16 +83,18 @@ pub fn left() {
     state.run = None;
 }
 
+/// Whether a seed changed since last call. Resets flag.
 pub fn take_dirty() -> bool {
     std::mem::take(&mut STATE.lock().unwrap().dirty)
 }
 
+/// Saved seed for `level` on `server`, if any.
 pub fn seed_for(server: &str, level: &str) -> Option<i64> {
     config(&mut STATE.lock().unwrap()).seed(server, level)
 }
 
-/// Seeded far terrain starts for a level. Far terrain set up again (a shader
-/// pack toggled) keeps the same run: no new compare, no repeated message.
+/// Starts seeded generation for a level.
+/// - Rebuilds (like toggling a shader pack) reuse same run, so no repeat compare or message.
 pub fn start(server: &str, level: &str, seed: i64, hash_matches: bool) -> Arc<Run> {
     let mut state = STATE.lock().unwrap();
     if let Some(run) = &state.run
@@ -115,16 +117,17 @@ pub fn start(server: &str, level: &str, seed: i64, hash_matches: bool) -> Arc<Ru
     run
 }
 
-/// A chat line for the player, shown on the next client tick.
+/// Queues a chat line, shown next client tick.
 pub fn say(line: &str) {
     STATE.lock().unwrap().outbox.push(line.to_owned());
 }
 
-/// `/lodseed radius`: chunks around the player; 0 for no limit.
+/// `/lodseed radius` in chunks. 0 means no limit.
 pub fn radius() -> i32 {
     RADIUS.load(Ordering::Relaxed)
 }
 
+/// Sets radius directly, for tests.
 #[cfg(test)]
 fn set_radius(radius: i32) {
     RADIUS.store(radius, Ordering::Relaxed);
@@ -140,6 +143,7 @@ const USAGES: [&str; 5] = [
     "lodseed radius <chunks:integer>",
 ];
 
+/// Runs `/lodseed` with `args`. Returns chat lines.
 fn lodseed(args: &[&str]) -> Vec<String> {
     let mut state = STATE.lock().unwrap();
     let Some(here) = state.here.clone() else {
@@ -196,7 +200,7 @@ fn lodseed(args: &[&str]) -> Vec<String> {
     }
 }
 
-/// Writes the config, and sets far terrain up again with it.
+/// Saves config and rebuilds far terrain with it.
 fn saved(state: &mut State, line: String) -> Vec<String> {
     state.dirty = true;
     match config(state).save() {
@@ -205,6 +209,7 @@ fn saved(state: &mut State, line: String) -> Vec<String> {
     }
 }
 
+/// Lines for `/lodseed status`.
 fn status(state: &mut State, here: &Here) -> Vec<String> {
     let mut lines = vec![format!("{} in {}", here.server, here.level)];
     let Some(seed) = config(state).seed(&here.server, &here.level) else {
@@ -240,6 +245,7 @@ fn status(state: &mut State, here: &Here) -> Vec<String> {
     lines
 }
 
+/// Radius as words for chat.
 fn radius_text(chunks: i32) -> String {
     if chunks == 0 {
         "the far-terrain distance".into()
@@ -248,6 +254,7 @@ fn radius_text(chunks: i32) -> String {
     }
 }
 
+/// Shows a prefixed chat line.
 fn chat(host: &mut dyn ClientHost, line: &str) {
     let _ = host.chat_line(Text::literal(format!("{PREFIX}{line}")));
 }
@@ -257,6 +264,7 @@ struct SeedLoader;
 
 #[mod_api::horizon_mod]
 impl Hooks for SeedLoader {
+    /// Registers `/lodseed` for tab completion.
     fn register_client_commands(
         &self,
         _: &mut dyn ClientHost,
@@ -265,6 +273,7 @@ impl Hooks for SeedLoader {
         event.commands.extend(USAGES.map(Command::new));
     }
 
+    /// Handles `/lodseed` locally. Other commands pass through.
     fn command(&self, host: &mut dyn ClientHost, event: &mut CommandEvent<'_>) -> Flow {
         let mut words = event.command.split_whitespace();
         if words.next() != Some("lodseed") {
@@ -274,10 +283,11 @@ impl Hooks for SeedLoader {
         for line in lodseed(&args) {
             chat(host, &line);
         }
-        // Ran here: never sent to the server.
+        // Handled locally, never sent to server.
         Flow::Cancel
     }
 
+    /// Shows queued chat lines.
     fn client_tick_post(&self, host: &mut dyn ClientHost, _: &mut ClientTickPostEvent) {
         let lines = std::mem::take(&mut STATE.lock().unwrap().outbox);
         for line in lines {
@@ -285,6 +295,7 @@ impl Hooks for SeedLoader {
         }
     }
 
+    /// Forgets current server.
     fn client_disconnecting(&self, _: &dyn ClientHost, _: &mut ClientDisconnectingEvent) {
         left();
     }

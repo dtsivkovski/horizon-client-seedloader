@@ -1,6 +1,6 @@
-//! Seeds as the game's world-creation screen reads them.
+//! Parses seeds like world creation does.
 
-/// A number is that seed; any other text is its Java `String.hashCode`.
+/// Numbers are used as-is. Other text uses Java's `String.hashCode`.
 pub fn parse(text: &str) -> Option<i64> {
     let text = text.trim();
     if text.is_empty() {
@@ -9,6 +9,7 @@ pub fn parse(text: &str) -> Option<i64> {
     Some(text.parse().unwrap_or_else(|_| java_hash(text)))
 }
 
+/// Java's `String.hashCode` over UTF-16 units.
 fn java_hash(text: &str) -> i64 {
     let hash = text
         .encode_utf16()
@@ -20,6 +21,7 @@ fn java_hash(text: &str) -> i64 {
 mod tests {
     use super::*;
 
+    /// Numbers parse as-is, text hashes like Java.
     #[test]
     fn numbers_and_text() {
         assert_eq!(parse("-4172144997902289642"), Some(-4172144997902289642));

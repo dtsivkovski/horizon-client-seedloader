@@ -5,7 +5,7 @@ description = "Generate far terrain (LODs) on servers from a known seed. Client-
 authors = ["Daniel Tsivkovski"]
 api = "0.2"
 side = "client"
-# Required by the manifest format; this mod registers nothing.
+# Required by manifest format. This mod registers nothing.
 capabilities = ["registries"]
 
 [native]
@@ -20,7 +20,7 @@ file = "crates/horizon-client/src/game/world/world_update.rs"
 name = "csl_seeded"
 source = "src/game/seeded.rs"
 
-# Picks the seeded source when this server has a seed; otherwise Horizon's own.
+# Uses seeded source when server has a seed. Otherwise uses Horizon's own.
 [[native.mixin]]
 id = "prepare_lod"
 target = "horizon_client::game::world_update::Game<'_>::prepare_lod"

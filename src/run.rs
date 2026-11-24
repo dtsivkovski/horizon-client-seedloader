@@ -1,4 +1,4 @@
-//! One level's seeded generation, shared with the far-terrain threads.
+//! Seeded generation state for one level, shared with far-terrain threads.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -10,7 +10,7 @@ pub struct Run {
     pub server: String,
     pub level: String,
     pub seed: i64,
-    /// The seed's hash is the one the server sent.
+    /// Seed hash matches what server sent.
     pub hash_matches: bool,
     center: [AtomicI32; 2],
     generated: AtomicU64,
@@ -20,15 +20,16 @@ pub struct Run {
 #[derive(Default)]
 struct Check {
     running: bool,
-    /// Server chunks waiting for their generated twin.
+    /// Server chunks waiting on their generated twin.
     real: HashMap<(i32, i32), Heights>,
-    /// Chunks to ask the generator for.
+    /// Chunks to request from generator.
     wanted: Vec<(i32, i32)>,
     scores: Vec<f32>,
     result: Option<(f32, bool)>,
 }
 
 impl Run {
+    /// New run. Soft-compare starts only if hash doesn't match.
     pub fn new(server: &str, level: &str, seed: i64, hash_matches: bool) -> Self {
         Self {
             server: server.to_owned(),
@@ -37,7 +38,7 @@ impl Run {
             hash_matches,
             center: [AtomicI32::new(0), AtomicI32::new(0)],
             generated: AtomicU64::new(0),
-            // Only a seed the server's hash doesn't vouch for is compared.
+            // Only compare seeds that server's hash doesn't vouch for.
             check: Mutex::new(Check {
                 running: !hash_matches,
                 ..Check::default()
@@ -45,40 +46,45 @@ impl Run {
         }
     }
 
+    /// Sets player's chunk.
     pub fn set_center(&self, [x, z]: [i32; 2]) {
         self.center[0].store(x, Ordering::Relaxed);
         self.center[1].store(z, Ordering::Relaxed);
     }
 
+    /// Player's chunk.
     pub fn center(&self) -> [i32; 2] {
         self.center.each_ref().map(|c| c.load(Ordering::Relaxed))
     }
 
-    /// Whether chunk `(x, z)` is within `/lodseed radius` of the player.
+    /// Whether chunk `(x, z)` is within `/lodseed radius` of player.
     pub fn in_radius(&self, x: i32, z: i32) -> bool {
         let radius = crate::radius();
         let [cx, cz] = self.center();
         radius <= 0 || ((x - cx).abs() <= radius && (z - cz).abs() <= radius)
     }
 
+    /// Counts one generated chunk.
     pub fn generated_one(&self) {
         self.generated.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// Chunks generated so far.
     pub fn generated(&self) -> u64 {
         self.generated.load(Ordering::Relaxed)
     }
 
-    /// The soft-compare's result so far: `None` while running or skipped.
+    /// Soft-compare result so far. `None` while running or skipped.
     pub fn result(&self) -> Option<(f32, bool)> {
         self.check.lock().unwrap().result
     }
 
+    /// Whether soft-compare is still running.
     pub fn checking(&self) -> bool {
         self.check.lock().unwrap().running
     }
 
-    /// A chunk the server sent: kept to compare, until enough are.
+    /// Keeps a server chunk to compare, until enough are kept.
     pub fn offer_real(&self, key: (i32, i32), heights: Heights) {
         let mut check = self.check.lock().unwrap();
         if check.running
@@ -90,15 +96,17 @@ impl Run {
         }
     }
 
+    /// Takes chunks soft-compare needs generated.
     pub fn take_wanted(&self) -> Vec<(i32, i32)> {
         std::mem::take(&mut self.check.lock().unwrap().wanted)
     }
 
+    /// Whether `key` is a server chunk held for soft-compare.
     pub fn is_compared(&self, key: (i32, i32)) -> bool {
         self.check.lock().unwrap().real.contains_key(&key)
     }
 
-    /// The generated twin of a kept server chunk.
+    /// Compares a kept server chunk with its generated twin.
     pub fn compare(&self, key: (i32, i32), generated: &Heights) {
         let mut check = self.check.lock().unwrap();
         let Some(real) = check.real.remove(&key) else {
@@ -134,6 +142,7 @@ impl Run {
 mod tests {
     use super::*;
 
+    /// Soft-compare decides once enough chunks are in.
     #[test]
     fn compares_until_enough_chunks() {
         let run = Run::new("s", "minecraft:overworld", 1, false);
@@ -150,6 +159,7 @@ mod tests {
         assert!(!run.checking());
     }
 
+    /// Matching hash skips soft-compare.
     #[test]
     fn a_vouched_seed_is_not_compared() {
         let run = Run::new("s", "minecraft:overworld", 1, true);
@@ -157,6 +167,7 @@ mod tests {
         assert!(run.take_wanted().is_empty());
     }
 
+    /// Radius is measured from player's chunk.
     #[test]
     fn radius_follows_the_player() {
         crate::set_radius(4);
