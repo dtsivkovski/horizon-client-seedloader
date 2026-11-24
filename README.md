@@ -80,4 +80,6 @@ Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and `cargo test` be
 
 ## License
 
-[MIT](LICENSE)
+This project is licensed under the [MIT License](LICENSE). See the `LICENSE` file for full details.
+
+Copyright (c) 2026 Daniel Tsivkovski
