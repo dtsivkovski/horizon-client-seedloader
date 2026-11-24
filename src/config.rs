@@ -12,8 +12,10 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+/// Config file path.
 pub const PATH: &str = "config/client_seed_loader.toml";
 
+/// One server's seeds.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Server {
     /// World seed for every dimension.
@@ -22,10 +24,12 @@ pub struct Server {
     pub dimensions: BTreeMap<String, i64>,
 }
 
+/// Whole config.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Config {
     /// Generation radius in chunks. 0 follows far-terrain distance.
     pub radius: i32,
+    /// Seeds per server.
     pub servers: BTreeMap<String, Server>,
 }
 

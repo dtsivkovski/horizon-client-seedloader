@@ -7,24 +7,34 @@ use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use crate::verify::{self, Heights};
 
 pub struct Run {
+    /// Server folder name.
     pub server: String,
+    /// Dimension ID (ex: `minecraft:overworld`).
     pub level: String,
+    /// Seed in use.
     pub seed: i64,
     /// Seed hash matches what server sent.
     pub hash_matches: bool,
+    /// Player's chunk for radius checks.
     center: [AtomicI32; 2],
+    /// Generated chunk count.
     generated: AtomicU64,
+    /// Soft-compare state.
     check: Mutex<Check>,
 }
 
+/// Soft-compare progress.
 #[derive(Default)]
 struct Check {
+    /// Still collecting chunks.
     running: bool,
     /// Server chunks waiting on their generated twin.
     real: HashMap<(i32, i32), Heights>,
     /// Chunks to request from generator.
     wanted: Vec<(i32, i32)>,
+    /// Per-chunk match scores.
     scores: Vec<f32>,
+    /// Final median score and verdict.
     result: Option<(f32, bool)>,
 }
 

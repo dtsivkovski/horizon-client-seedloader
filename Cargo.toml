@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 description = "Client-side Horizon mod: generate far terrain (LODs) on servers from a known seed."
+repository = "https://github.com/dtsivkovski/horizon-client-seedloader"
+# Don't publish to crates, since it builds against a local SDK
+publish = false
 
 [dependencies]
 # Pinned SDK API crate. `cargo horizon-mod check` fetches it into .horizon/sdk/.

@@ -3,6 +3,9 @@
 //! - Keeps seeds (`/lodseed`, `config/client_seed_loader.toml`) and chat lines.
 //! - Far-terrain source is `src/game/seeded.rs`, compiled inside game. It calls `pub fn`s here.
 
+// Every item gets a doc comment.
+#![warn(clippy::missing_docs_in_private_items)]
+
 mod config;
 mod run;
 mod seed;
@@ -20,26 +23,35 @@ use crate::config::Config;
 pub use crate::run::Run;
 pub use crate::verify::Heights;
 
+/// Chat line prefix.
 const PREFIX: &str = "[Seed Loader] ";
 
 /// Player's current server and level.
 #[derive(Clone, PartialEq, Eq)]
 struct Here {
+    /// Server folder name.
     server: String,
+    /// Current dimension.
     level: String,
+    /// Server's seed hash.
     hashed_seed: i64,
 }
 
+/// State shared by commands and game side.
 struct State {
+    /// Lazily loaded config.
     config: Option<Config>,
+    /// Current server and level.
     here: Option<Here>,
     /// Seed changed, so far terrain gets rebuilt.
     dirty: bool,
+    /// Current generation run.
     run: Option<Arc<Run>>,
     /// Chat lines queued for next client tick.
     outbox: Vec<String>,
 }
 
+/// Shared mod state.
 static STATE: Mutex<State> = Mutex::new(State {
     config: None,
     here: None,
@@ -47,6 +59,7 @@ static STATE: Mutex<State> = Mutex::new(State {
     run: None,
     outbox: Vec::new(),
 });
+/// `/lodseed radius` for lock-free reads.
 static RADIUS: AtomicI32 = AtomicI32::new(0);
 
 /// Config, loaded on first use.
@@ -135,6 +148,7 @@ fn set_radius(radius: i32) {
 
 // ---- /lodseed ----
 
+/// `/lodseed` forms for tab completion.
 const USAGES: [&str; 5] = [
     "lodseed",
     "lodseed status",
@@ -259,6 +273,7 @@ fn chat(host: &mut dyn ClientHost, line: &str) {
     let _ = host.chat_line(Text::literal(format!("{PREFIX}{line}")));
 }
 
+/// Mod entry point.
 #[derive(Default)]
 struct SeedLoader;
 
