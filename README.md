@@ -1,102 +1,78 @@
-# Horizon Mod Template (Veinminer)
+# Client Seed Loader
 
-Official starter template for [Horizon](https://github.com/horizon-rust/horizon) code mods built on `horizon-mod-api` and the exact-build Mod SDK.
+A client-side [Horizon](https://playhorizon.dev) mod. On a multiplayer server, give it the world seed and Horizon's far terrain (LODs) will generate chunks you haven't been to. It's only generated locally from a provided seed, so you can take advantage of Horizon's fast LOD rendering.
 
-The template implements a complete, working **server-side Veinminer**: hold **Sneak** in Survival mode and break a connected ore vein (including stone + deepslate pairs) or tree log to mine up to 64 connected blocks at once. Every block is broken through `PlayerRef::destroy_block`, preserving vanilla tool checks, enchantments, tool wear, loot tables, statistics, exhaustion, and spawn protection. Drops and experience are collected via `Hooks::block_drops`, merged, and spawned at the mined block.
+- Chunks the server has already sent take priority over locally generated ones.
+- Generated chunks are cached on disk, loading instantly the next time.
+- Nothing is sent back to the server.
 
-The same Rust source builds as either:
-- a **native `.hmod`** (`kind = "native-mod"`, compiled by the Horizon launcher against the signed SDK), or
-- a **sandboxed WebAssembly `.hmod`** (`kind = "mod"`, built to `mod.wasm` with `cargo horizon-mod build --wasm`, no native-code trust prompt needed).
+## Use
 
-> **Pinned Horizon build:** Nightly 2026-11-22 · `f1bb66f` (`f1bb66f353cf67f2aa4665293fc75c8d91186fc7`, SDK release `sdk-f1bb66f353cf67f2aa4665293fc75c8d91186fc7`).
+In chat, on a server:
 
-## Prerequisites
+| Command | Does |
+| --- | --- |
+| `/lodseed set <seed> [dimension]` | Save the seed for this server (may specify a specific dimension, otherwise it's all of them) |
+| `/lodseed clear [dimension]` | Forget the seed |
+| `/lodseed radius <chunks>` | Limit generation around you (`0` = far-terrain distance) |
+| `/lodseed status` | Seed, hash check, terrain check, chunks generated |
 
-1. [Rust](https://rustup.rs) (`cargo`) and the [Horizon launcher](https://playhorizon.dev).
-2. Install `cargo-horizon-mod` from the pinned Horizon commit:
+Far terrain must be on (Video Settings). Seeds can be numbers or text, just like for world gen.
+
+**Seed check:** servers send a hash of their seed. If yours doesn't match, the mod warns you, then compares a few generated chunks with real ones and tells you whether the terrain matches (this is because some servers may fake the hash).
+
+## Files
+
+| Path (in the game folder) | What |
+| --- | --- |
+| `config/client_seed_loader.toml` | Seeds per server and dimension |
+| `horizon-mod-data/client_seed_loader/<server>/<hashed seed>/<seed>/<dimension>/` | Generated chunk cache (safe to delete) |
+| `server-terrain/` | Horizon's own cache of real server chunks (untouched) |
+
+## Develop
+
+Needs [Rust](https://rustup.rs) and the Horizon launcher.
 
 ```sh
-cargo install --locked --git https://github.com/horizon-rust/horizon --rev f1bb66f353cf67f2aa4665293fc75c8d91186fc7 cargo-horizon-mod
-```
+# Once, and after `cargo horizon-mod update`: install the build tool
+cargo install --locked --git https://github.com/horizon-rust/horizon \
+  --rev "$(sed -n 's/^horizon = "\(.*\)"/\1/p' horizon-mod.toml)" cargo-horizon-mod
 
-## Quick start (native `.hmod`)
-
-Click **Use this template → Create a new repository**, clone it, and fetch the pinned SDK into `.horizon/sdk/`:
-
-```sh
-# Fetches and verifies the signed SDK into .horizon/sdk/ (not committed to git)
-cargo horizon-mod check
-
-# Run unit tests and lints
-cargo test
+cargo horizon-mod check        # fetch the SDK into .horizon/sdk/
+cargo test                     # unit tests (seed, config, terrain compare)
 cargo clippy --all-targets -- -D warnings
+cargo horizon-mod build        # pack target/horizon-mod/client_seed_loader.hmod
 
-# Pack target/horizon-mod/veinminer.hmod and verify the package
-cargo horizon-mod build
-cargo horizon-mod check target/horizon-mod/veinminer.hmod
+# Compile against the game and install into an instance, then play it
+horizon-launcher native-build . --instance "<instance>" --trust-native-code
 ```
 
-To build and play it in a Horizon launcher instance:
+`cargo build` only checks `src/lib.rs` and its modules. The game-side code (`src/game/`, `src/mixins/`) compiles only inside `native-build`.
 
-```sh
-horizon-launcher native-build . --instance "My Instance" --trust-native-code
-```
-
-## Building the same code as WebAssembly (`.hmod`)
-
-Because this template uses only `horizon-mod-api` (no mixins or game internals), the exact same `src/` compiles to a sandboxed `mod.wasm`:
-
-1. Remove the `[native]` table from `horizon-mod.toml` (a mod carries `[native]` or `[wasm]`, never both).
-2. Add the SDK pin to `Cargo.toml`:
-   ```toml
-   [package.metadata.horizon]
-   sdk = "f1bb66f353cf67f2aa4665293fc75c8d91186fc7"
-   ```
-3. Build and check:
-   ```sh
-   cargo horizon-mod build --wasm
-   cargo horizon-mod check target/horizon-mod/veinminer.hmod
-   ```
-
-Copy `target/horizon-mod/veinminer.hmod` into your instance's `horizon-mods/` folder and enable it in `horizon-mods.txt` (`mod.veinminer:true`).
-
-## Project layout
+### Layout
 
 ```text
-horizon-mod.toml      # Mod identity (id, version, side) and pinned Horizon build
-Cargo.toml            # Depends on horizon-mod-api from .horizon/sdk/
-src/
-  lib.rs              # #[mod_api::horizon_mod] Hooks impl (break_block + block_drops)
-  vein.rs             # Pure vein-group definitions, 26-connected BFS, and unit tests
-assets/               # Optional (create if adding client resources: textures, models, lang)
-data/                 # Optional (create if adding server data: recipes, loot tables, tags)
-.horizon/sdk/         # Fetched & verified signed SDK (gitignored, never packed)
+horizon-mod.toml     # id, pinned Horizon build, the mixin and support module
+src/lib.rs           # /lodseed commands, chat lines, state shared with the game side
+src/config.rs        # config/client_seed_loader.toml
+src/seed.rs          # text seeds -> numbers
+src/verify.rs        # soft-compare of generated vs real chunks
+src/run.rs           # one level's generation state
+src/game/seeded.rs   # the far-terrain source (compiled inside the game)
+src/mixins/          # hooks it into Game::prepare_lod
 ```
 
-## Customizing for your own mod
+### How it works
 
-1. Update `id`, `name`, `description`, `authors`, and `side` in `horizon-mod.toml` (`id` must match `[a-z0-9_]{1,64}`).
-2. Update `name` and `description` in `Cargo.toml`.
-3. Replace or extend `src/lib.rs` and `src/vein.rs` with your hooks — see the [Horizon Modding Book](https://github.com/horizon-rust/horizon/tree/main/docs/modding/src) for available hooks, `Host` methods, Parts, attachments, and optional `[[inject]]` / `[[native.mixin]]` escape hatches.
-4. Do **not** add a `rust-toolchain.toml`: the pinned Horizon SDK controls the toolchain that builds native and WebAssembly mods.
+Horizon picks a far-terrain source in `Game::prepare_lod`. On a plain server that's `ServerTerrain`, which only knows chunks the server sent. A `HEAD` mixin there swaps in a source that asks `ServerTerrain` first, then the disk cache, then Horizon's own vanilla generator (`VanillaTerrain`, the one single-player uses) on its low-priority far-terrain threads.
 
-## Updating to a newer Horizon Nightly
+### Updating Horizon
 
 ```sh
 cargo horizon-mod update
 ```
 
-Or pin an explicit build commit:
-
-```sh
-cargo horizon-mod update --horizon <40-char-commit-sha>
-```
-
-## Publishing to `horizon-mods`
-
-1. Run `cargo horizon-mod check target/horizon-mod/<id>.hmod`.
-2. Attach `<id>-<version>.hmod` to a GitHub release of your repository.
-3. Open a pull request on [horizon-rust/horizon-mods](https://github.com/horizon-rust/horizon-mods) adding `mods/<id>.toml` — see its [Submit guide](https://github.com/horizon-rust/horizon-mods#submit).
+Then reinstall the build tool (above) and rebuild. If `prepare_lod` changed upstream, compare it with `src/game/seeded.rs`, which mirrors its checks.
 
 ## License
 

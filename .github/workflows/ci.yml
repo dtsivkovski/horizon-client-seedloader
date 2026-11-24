@@ -33,4 +33,4 @@ jobs:
       - name: Build and verify .hmod package
         run: |
           cargo horizon-mod build
-          cargo horizon-mod check target/horizon-mod/veinminer.hmod
+          cargo horizon-mod check target/horizon-mod/client_seed_loader.hmod
