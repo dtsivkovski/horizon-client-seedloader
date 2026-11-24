@@ -3,7 +3,7 @@
 //! - Keeps seeds (`/lodseed`, `config/client_seed_loader.toml`) and chat lines.
 //! - Far-terrain source is `src/game/seeded.rs`, compiled inside game. It calls `pub fn`s here.
 
-// Every item gets a doc comment.
+// Every item should have a doc comment
 #![warn(clippy::missing_docs_in_private_items)]
 
 mod config;
