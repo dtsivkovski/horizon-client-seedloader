@@ -20,11 +20,24 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          # `cargo horizon-mod check` also checks API against wasm.
+          targets: wasm32-unknown-unknown
+
+      - name: Read pinned Horizon commit
+        id: pin
+        run: echo "rev=$(python3 -c 'import tomllib; print(tomllib.load(open("horizon-mod.toml", "rb"))["native"]["horizon"])')" >> "$GITHUB_OUTPUT"
+
+      # Build tool takes about 10 minutes to compile, so keep it per pin.
+      - name: Cache cargo-horizon-mod
+        id: tool
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-horizon-mod
+          key: cargo-horizon-mod-${{ steps.pin.outputs.rev }}
 
       - name: Install cargo-horizon-mod for pinned Horizon commit
-        run: |
-          HORIZON_REV="$(python3 -c 'import tomllib; print(tomllib.load(open("horizon-mod.toml", "rb"))["native"]["horizon"])')"
-          cargo install --locked --git https://github.com/horizon-rust/horizon --rev "$HORIZON_REV" cargo-horizon-mod
+        if: steps.tool.outputs.cache-hit != 'true'
+        run: cargo install --locked --git https://github.com/horizon-rust/horizon --rev "${{ steps.pin.outputs.rev }}" cargo-horizon-mod
 
       - name: Fetch pinned SDK
         run: cargo horizon-mod check
