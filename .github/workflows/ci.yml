@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install cargo-horizon-mod for pinned Horizon commit
+        run: |
+          HORIZON_REV="$(python3 -c 'import tomllib; print(tomllib.load(open("horizon-mod.toml", "rb"))["native"]["horizon"])')"
+          cargo install --locked --git https://github.com/horizon-rust/horizon --rev "$HORIZON_REV" cargo-horizon-mod
+
+      - name: Fetch pinned SDK
+        run: cargo horizon-mod check
+
+      - name: Format, clippy, and unit tests
+        run: |
+          cargo fmt -- --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: Build and verify .hmod package
+        run: |
+          cargo horizon-mod build
+          cargo horizon-mod check target/horizon-mod/veinminer.hmod
