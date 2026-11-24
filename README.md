@@ -74,6 +74,10 @@ cargo horizon-mod update
 
 Then reinstall the build tool (above) and rebuild. If `prepare_lod` changed upstream, compare it with `src/game/seeded.rs`, which mirrors its checks.
 
+### Contributing
+
+Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and `cargo test` before opening a PR, CI already runs all three.
+
 ## License
 
 [MIT](LICENSE)
